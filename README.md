@@ -217,9 +217,15 @@ The `install.bat` script:
 
 **To use install.bat:**
 1. Download or clone the repository
-2. Right-click `install.bat` and select "Run as administrator" (or double-click)
+2. Right-click `install.bat` and select "Run as administrator" (or double-click) —
+   or if launching from a terminal, see below
 3. Follow the on-screen instructions
 4. Once complete, use `npm start` to run the server
+
+> **Running from a terminal?** In **PowerShell** you must type `.\install.bat`
+> (not just `install.bat`) or it fails with *"not recognized..."* — this is
+> PowerShell's own current-directory rule, not a bug in the script. In
+> **cmd.exe**, plain `install.bat` works fine.
 
 ### macOS & Linux Specific Notes
 
