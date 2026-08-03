@@ -94,16 +94,42 @@ else
     exit 1
   fi
 
-  if [ -d "$INSTALL_DIR/.git" ]; then
+  if [ -d "$INSTALL_DIR/.git" ] && [ -f "$INSTALL_DIR/package.json" ]; then
     echo ""
     echo "📥 Updating existing install at $INSTALL_DIR ..."
-    git -C "$INSTALL_DIR" pull --ff-only
+    # Don't rely on branch tracking (a stale clone may be on 'master' with no
+    # upstream, which breaks 'git pull'). Fetch and hard-reset to origin/main.
+    # data.json is gitignored, so the user's saved clipboard is not touched.
+    if git -C "$INSTALL_DIR" fetch origin \
+       && git -C "$INSTALL_DIR" checkout -B main origin/main \
+       && git -C "$INSTALL_DIR" reset --hard origin/main; then
+      :
+    else
+      echo "⚠️  Could not update the existing checkout; re-cloning a fresh copy."
+      rm -rf "$INSTALL_DIR"
+      git clone "$REPO_URL" "$INSTALL_DIR"
+    fi
   else
+    if [ -e "$INSTALL_DIR" ]; then
+      echo ""
+      echo "⚠️  $INSTALL_DIR exists but is not a valid Scratchpad install; moving it aside to ${INSTALL_DIR}.bak"
+      rm -rf "${INSTALL_DIR}.bak"
+      mv "$INSTALL_DIR" "${INSTALL_DIR}.bak"
+    fi
     echo ""
     echo "📥 Cloning Scratchpad into $INSTALL_DIR ..."
     git clone "$REPO_URL" "$INSTALL_DIR"
   fi
   TARGET_DIR="$INSTALL_DIR"
+fi
+
+# Guard: never run npm install without a package.json.
+if [ ! -f "$TARGET_DIR/package.json" ]; then
+  echo ""
+  echo "❌ package.json not found in $TARGET_DIR - the install is incomplete."
+  echo "   Remove that folder and re-run the installer:"
+  echo "     rm -rf \"$TARGET_DIR\""
+  exit 1
 fi
 
 # Install dependencies

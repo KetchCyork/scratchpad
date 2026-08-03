@@ -47,20 +47,60 @@ if ($scriptDir -and (Test-Path (Join-Path $scriptDir 'package.json'))) {
         Write-Host "  cd scratchpad; .\install.bat"
         exit 1
     }
-    if (Test-Path (Join-Path $InstallDir '.git')) {
+    # A valid install must have BOTH a .git dir and a checked-out package.json.
+    $isValidRepo = (Test-Path (Join-Path $InstallDir '.git')) -and (Test-Path (Join-Path $InstallDir 'package.json'))
+    $updated = $false
+
+    if ($isValidRepo) {
         Write-Host "Updating existing install at $InstallDir ..."
-        git -C $InstallDir pull --ff-only
-    } else {
+        # Do not rely on branch tracking info: a stale clone may be on 'master'
+        # with no upstream, which breaks 'git pull'. Fetch and hard-reset to
+        # origin/main instead. (data.json is gitignored, so user data is safe.)
+        git -C $InstallDir fetch origin 2>&1 | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            git -C $InstallDir checkout -B main origin/main 2>&1 | Out-Null
+            git -C $InstallDir reset --hard origin/main 2>&1 | Out-Null
+            if ($LASTEXITCODE -eq 0) { $updated = $true }
+        }
+        if (-not $updated) {
+            Write-Host '[WARN] Could not update the existing checkout; re-cloning a fresh copy.'
+        }
+    }
+
+    if (-not $updated) {
+        if (Test-Path $InstallDir) {
+            $backup = "$InstallDir.bak"
+            if (Test-Path $backup) { Remove-Item -Recurse -Force $backup }
+            Write-Host "Moving aside existing folder: $InstallDir -> $backup"
+            Move-Item -Force $InstallDir $backup
+        }
         Write-Host "Cloning Scratchpad into $InstallDir ..."
         git clone $RepoUrl $InstallDir
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host '[ERROR] git clone failed. Check your network connection and try again.'
+            exit 1
+        }
     }
     $TargetDir = $InstallDir
+}
+
+# Guard: never run npm install without a package.json (was the Windows failure).
+if (-not (Test-Path (Join-Path $TargetDir 'package.json'))) {
+    Write-Host "[ERROR] package.json not found in $TargetDir - the install is incomplete."
+    Write-Host 'Remove that folder and re-run the installer:'
+    Write-Host "  Remove-Item -Recurse -Force '$TargetDir'"
+    exit 1
 }
 
 Write-Host 'Installing dependencies...'
 Push-Location $TargetDir
 npm install
+$npmExit = $LASTEXITCODE
 Pop-Location
+if ($npmExit -ne 0) {
+    Write-Host '[ERROR] npm install failed. See the npm output above for details.'
+    exit 1
+}
 
 $Port = if ($env:SCRATCHPAD_PORT) { $env:SCRATCHPAD_PORT } else { '7777' }
 
