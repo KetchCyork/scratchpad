@@ -1,55 +1,60 @@
 @echo off
+chcp 65001 >nul
 REM Scratchpad - Windows installation script
 REM Installs and starts the scratchpad clipboard sharing app
+REM
+REM Run from a Command Prompt (cmd) OR PowerShell:
+REM   cmd:         install.bat
+REM   PowerShell:  .\install.bat   (PowerShell will not run a script from the
+REM                                 current folder without the leading .\ )
 
 setlocal enabledelayedexpansion
 
 echo.
-echo 🚀 Scratchpad - Network Clipboard Installation
-echo =============================================
+echo == Scratchpad - Network Clipboard Installation ==
+echo =================================================
 echo.
 
-REM Check if Node.js is installed
-where node >nul 2>nul
-if %errorlevel% neq 0 (
-    echo ❌ Node.js is not installed.
+REM Check if Node.js is installed (node --version is more reliable than "where")
+node --version >nul 2>nul
+if errorlevel 1 (
+    echo [ERROR] Node.js is not installed.
     echo.
     echo Please install Node.js from https://nodejs.org/ ^(v16 or later^)
     echo.
-    echo After installing Node.js, run this script again.
+    echo After installing Node.js, close this window, open a new one, and run this script again.
     echo.
     pause
     exit /b 1
 )
 
 for /f "tokens=*" %%i in ('node -v') do set NODE_VERSION=%%i
-echo ✓ Node.js found: %NODE_VERSION%
+echo [OK] Node.js found: %NODE_VERSION%
 
 REM Check if npm is installed
-where npm >nul 2>nul
-if %errorlevel% neq 0 (
-    echo ❌ npm is not installed. Please install Node.js with npm.
+npm --version >nul 2>nul
+if errorlevel 1 (
+    echo [ERROR] npm is not installed. Please install Node.js with npm.
     pause
     exit /b 1
 )
 
 for /f "tokens=*" %%i in ('npm -v') do set NPM_VERSION=%%i
-echo ✓ npm found: %NPM_VERSION%
+echo [OK] npm found: %NPM_VERSION%
 
-REM Get the script directory
+REM Get the script directory (the folder this .bat lives in)
 set SCRIPT_DIR=%~dp0
 echo.
 echo Installation directory: %SCRIPT_DIR%
 
 REM Install dependencies
 echo.
-echo 📦 Installing dependencies...
+echo Installing dependencies...
 cd /d "%SCRIPT_DIR%"
 call npm install
-
-if %errorlevel% neq 0 (
+if errorlevel 1 (
     echo.
-    echo ❌ Error installing dependencies
+    echo [ERROR] Error installing dependencies
     pause
     exit /b 1
 )
@@ -57,9 +62,9 @@ if %errorlevel% neq 0 (
 set PORT=7777
 
 echo.
-echo ✅ Installation complete!
+echo [OK] Installation complete!
 echo.
-echo 🎉 To start the scratchpad server, run:
+echo To start the scratchpad server, run:
 echo.
 echo    cd %SCRIPT_DIR%
 echo    npm start

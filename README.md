@@ -39,10 +39,19 @@ bash install.sh
 
 #### Windows
 
-Double-click `install.bat` or run from Command Prompt:
-```cmd
-install.bat
+**Recommended — one-line install (PowerShell):** paste this into a PowerShell
+window. It clones into `%USERPROFILE%\scratchpad`, installs dependencies, and
+prints how to start the server. This avoids the `.\` prompt and console-encoding
+quirks of the `.bat` file.
+```powershell
+powershell -c "irm https://raw.githubusercontent.com/KetchCyork/scratchpad/main/install.ps1 | iex"
 ```
+
+**Or, from a cloned repo:**
+- **Command Prompt (cmd):** `install.bat`
+- **PowerShell:** `.\install.bat` — PowerShell will not run a script from the
+  current folder without the leading `.\`. (If you type just `install.bat` it
+  reports *"not recognized as the name of a cmdlet..."* — add `.\`.)
 
 Both installers will:
 1. Check for Node.js (and guide you to install if needed)
