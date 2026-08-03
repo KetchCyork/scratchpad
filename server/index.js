@@ -34,9 +34,28 @@ function writeData(data) {
 }
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: function(origin, callback) {
+    // Allow same-origin requests (no Origin header) and localhost/tailscale IPs
+    if (!origin || origin.match(/^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.|[a-f0-9]*::[a-f0-9]*)/i)) {
+      callback(null, true);
+    } else {
+      callback(new Error('CORS not allowed'));
+    }
+  }
+}));
 app.use(bodyParser.json({ limit: '50mb' }));
 app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
+
+// Security headers
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; object-src 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data:");
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  next();
+});
 
 // Serve static files (frontend)
 app.use(express.static(path.join(__dirname, '../public')));
@@ -49,19 +68,42 @@ app.get('/api/items', (req, res) => {
   res.json(data.items.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
 });
 
+// Validate item content based on type
+function validateItem(content, type) {
+  if (!content || !type) {
+    return { valid: false, error: 'content and type required' };
+  }
+
+  // Constrain type to enum
+  if (!['text', 'image'].includes(type)) {
+    return { valid: false, error: 'type must be "text" or "image"' };
+  }
+
+  // For images, validate it's a data URI with base64 image content
+  if (type === 'image') {
+    const imageRegex = /^data:image\/(png|jpe?g|gif|webp);base64,[A-Za-z0-9+/=]+$/;
+    if (!imageRegex.test(content)) {
+      return { valid: false, error: 'image must be base64-encoded data URI (png, jpg, gif, webp only)' };
+    }
+  }
+
+  return { valid: true };
+}
+
 // Create new item
 app.post('/api/items', (req, res) => {
   const { content, type } = req.body;
 
-  if (!content || !type) {
-    return res.status(400).json({ error: 'content and type required' });
+  const validation = validateItem(content, type);
+  if (!validation.valid) {
+    return res.status(400).json({ error: validation.error });
   }
 
   const data = readData();
   const item = {
     id: uuidv4(),
     content,
-    type, // 'text' or 'image'
+    type,
     createdAt: new Date().toISOString(),
     hostname: process.env.HOSTNAME || 'unknown'
   };

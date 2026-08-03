@@ -352,25 +352,67 @@
         return;
       }
 
-      container.innerHTML = items.map(item => `
-        <div class="item-card">
-          <div class="item-header">
-            <span class="item-type ${item.type}">${item.type === 'image' ? '🖼️ Image' : '📝 Text'}</span>
-            <span class="item-time">${new Date(item.createdAt).toLocaleTimeString()}</span>
-          </div>
-          <div class="item-content">
-            ${item.type === 'image'
-              ? `<img src="${item.content}" alt="Shared image">`
-              : `<pre>${escapeHtml(item.content)}</pre>`
-            }
-          </div>
-          <div class="hostname">From: ${item.hostname}</div>
-          <div class="item-footer">
-            <button class="btn-small btn-copy" onclick="copyItem('${item.id}', '${item.type}')">Copy</button>
-            <button class="btn-small btn-delete" onclick="deleteItem('${item.id}')">Delete</button>
-          </div>
-        </div>
-      `).join('');
+      // Build DOM safely - never use innerHTML with user data
+      container.innerHTML = '';
+      items.forEach(item => {
+        const card = document.createElement('div');
+        card.className = 'item-card';
+
+        const header = document.createElement('div');
+        header.className = 'item-header';
+
+        const typeLabel = document.createElement('span');
+        typeLabel.className = 'item-type ' + (item.type === 'image' ? 'image' : 'text');
+        typeLabel.textContent = item.type === 'image' ? '🖼️ Image' : '📝 Text';
+
+        const timeLabel = document.createElement('span');
+        timeLabel.className = 'item-time';
+        timeLabel.textContent = new Date(item.createdAt).toLocaleTimeString();
+
+        header.appendChild(typeLabel);
+        header.appendChild(timeLabel);
+
+        const content = document.createElement('div');
+        content.className = 'item-content';
+
+        if (item.type === 'image') {
+          const img = document.createElement('img');
+          img.src = item.content;
+          img.alt = 'Shared image';
+          content.appendChild(img);
+        } else {
+          const pre = document.createElement('pre');
+          pre.textContent = item.content;
+          content.appendChild(pre);
+        }
+
+        const hostname = document.createElement('div');
+        hostname.className = 'hostname';
+        hostname.textContent = 'From: ' + item.hostname;
+
+        const footer = document.createElement('div');
+        footer.className = 'item-footer';
+
+        const copyBtn = document.createElement('button');
+        copyBtn.className = 'btn-small btn-copy';
+        copyBtn.textContent = 'Copy';
+        copyBtn.onclick = () => copyItem(item.id, item.type);
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'btn-small btn-delete';
+        deleteBtn.textContent = 'Delete';
+        deleteBtn.onclick = () => deleteItem(item.id);
+
+        footer.appendChild(copyBtn);
+        footer.appendChild(deleteBtn);
+
+        card.appendChild(header);
+        card.appendChild(content);
+        card.appendChild(hostname);
+        card.appendChild(footer);
+
+        container.appendChild(card);
+      });
     }
 
     async function addText() {
