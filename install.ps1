@@ -47,39 +47,38 @@ if ($scriptDir -and (Test-Path (Join-Path $scriptDir 'package.json'))) {
         Write-Host "  cd scratchpad; .\install.bat"
         exit 1
     }
-    # A valid install must have BOTH a .git dir and a checked-out package.json.
-    $isValidRepo = (Test-Path (Join-Path $InstallDir '.git')) -and (Test-Path (Join-Path $InstallDir 'package.json'))
-    $updated = $false
-
-    if ($isValidRepo) {
-        Write-Host "Updating existing install at $InstallDir ..."
-        # Do not rely on branch tracking info: a stale clone may be on 'master'
-        # with no upstream, which breaks 'git pull'. Fetch and hard-reset to
-        # origin/main instead. (data.json is gitignored, so user data is safe.)
-        git -C $InstallDir fetch origin 2>&1 | Out-Null
-        if ($LASTEXITCODE -eq 0) {
-            git -C $InstallDir checkout -B main origin/main 2>&1 | Out-Null
-            git -C $InstallDir reset --hard origin/main 2>&1 | Out-Null
-            if ($LASTEXITCODE -eq 0) { $updated = $true }
-        }
-        if (-not $updated) {
-            Write-Host '[WARN] Could not update the existing checkout; re-cloning a fresh copy.'
-        }
+    # Recover IN PLACE — never Move-Item the target folder. On Windows the user's
+    # shell is often CWD'd inside it (e.g. running from ~\scratchpad\scratchpad),
+    # which locks the folder and makes Move-Item fail ("item is in use"). Instead
+    # we turn whatever is at $InstallDir into a clean origin/main checkout without
+    # relocating it. (data.json is gitignored, so the saved clipboard survives.)
+    if (Test-Path (Join-Path $InstallDir '.git')) {
+        Write-Host "Updating existing checkout at $InstallDir ..."
+        git -C $InstallDir remote set-url origin $RepoUrl 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) { git -C $InstallDir remote add origin $RepoUrl 2>&1 | Out-Null }
+    } elseif (Test-Path $InstallDir) {
+        # Folder exists but is not a git repo (or is a broken/partial checkout).
+        # Initialize the repo in place rather than moving the folder aside.
+        Write-Host "Repairing existing folder in place: $InstallDir ..."
+        git init $InstallDir 2>&1 | Out-Null
+        git -C $InstallDir remote remove origin 2>&1 | Out-Null
+        git -C $InstallDir remote add origin $RepoUrl 2>&1 | Out-Null
+    } else {
+        Write-Host "Cloning Scratchpad into $InstallDir ..."
+        git init $InstallDir 2>&1 | Out-Null
+        git -C $InstallDir remote add origin $RepoUrl 2>&1 | Out-Null
     }
 
-    if (-not $updated) {
-        if (Test-Path $InstallDir) {
-            $backup = "$InstallDir.bak"
-            if (Test-Path $backup) { Remove-Item -Recurse -Force $backup }
-            Write-Host "Moving aside existing folder: $InstallDir -> $backup"
-            Move-Item -Force $InstallDir $backup
-        }
-        Write-Host "Cloning Scratchpad into $InstallDir ..."
-        git clone $RepoUrl $InstallDir
-        if ($LASTEXITCODE -ne 0) {
-            Write-Host '[ERROR] git clone failed. Check your network connection and try again.'
-            exit 1
-        }
+    git -C $InstallDir fetch origin 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host '[ERROR] git fetch failed. Check your network connection and try again.'
+        exit 1
+    }
+    git -C $InstallDir checkout -B main origin/main --force 2>&1 | Out-Null
+    git -C $InstallDir reset --hard origin/main 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host '[ERROR] Could not check out origin/main into the folder.'
+        exit 1
     }
     $TargetDir = $InstallDir
 }

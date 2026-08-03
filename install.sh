@@ -94,32 +94,34 @@ else
     exit 1
   fi
 
-  if [ -d "$INSTALL_DIR/.git" ] && [ -f "$INSTALL_DIR/package.json" ]; then
+  # Recover IN PLACE — never move or delete the target folder. The user's shell
+  # may be CWD'd inside it, which makes a move fail (and rm surprising). Instead
+  # turn whatever is at $INSTALL_DIR into a clean origin/main checkout without
+  # relocating it. data.json is gitignored, so the saved clipboard survives.
+  if [ -d "$INSTALL_DIR/.git" ]; then
     echo ""
-    echo "📥 Updating existing install at $INSTALL_DIR ..."
-    # Don't rely on branch tracking (a stale clone may be on 'master' with no
-    # upstream, which breaks 'git pull'). Fetch and hard-reset to origin/main.
-    # data.json is gitignored, so the user's saved clipboard is not touched.
-    if git -C "$INSTALL_DIR" fetch origin \
-       && git -C "$INSTALL_DIR" checkout -B main origin/main \
-       && git -C "$INSTALL_DIR" reset --hard origin/main; then
-      :
-    else
-      echo "⚠️  Could not update the existing checkout; re-cloning a fresh copy."
-      rm -rf "$INSTALL_DIR"
-      git clone "$REPO_URL" "$INSTALL_DIR"
-    fi
+    echo "📥 Updating existing checkout at $INSTALL_DIR ..."
+    git -C "$INSTALL_DIR" remote set-url origin "$REPO_URL" 2>/dev/null \
+      || git -C "$INSTALL_DIR" remote add origin "$REPO_URL"
+  elif [ -e "$INSTALL_DIR" ]; then
+    echo ""
+    echo "🔧 Repairing existing folder in place: $INSTALL_DIR ..."
+    git init "$INSTALL_DIR" >/dev/null
+    git -C "$INSTALL_DIR" remote remove origin 2>/dev/null || true
+    git -C "$INSTALL_DIR" remote add origin "$REPO_URL"
   else
-    if [ -e "$INSTALL_DIR" ]; then
-      echo ""
-      echo "⚠️  $INSTALL_DIR exists but is not a valid Scratchpad install; moving it aside to ${INSTALL_DIR}.bak"
-      rm -rf "${INSTALL_DIR}.bak"
-      mv "$INSTALL_DIR" "${INSTALL_DIR}.bak"
-    fi
     echo ""
     echo "📥 Cloning Scratchpad into $INSTALL_DIR ..."
-    git clone "$REPO_URL" "$INSTALL_DIR"
+    git init "$INSTALL_DIR" >/dev/null
+    git -C "$INSTALL_DIR" remote add origin "$REPO_URL"
   fi
+
+  if ! git -C "$INSTALL_DIR" fetch origin; then
+    echo "❌ git fetch failed. Check your network connection and try again."
+    exit 1
+  fi
+  git -C "$INSTALL_DIR" checkout -B main origin/main --force
+  git -C "$INSTALL_DIR" reset --hard origin/main
   TARGET_DIR="$INSTALL_DIR"
 fi
 
