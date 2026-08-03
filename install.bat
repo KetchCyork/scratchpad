@@ -65,14 +65,20 @@ echo    cd %SCRIPT_DIR%
 echo    npm start
 echo.
 echo The app will be available at: http://localhost:%PORT%
+echo By default it only binds to 127.0.0.1 ^(this machine only^).
 echo.
 echo To access from other computers on your Tailscale network:
 echo 1. Make sure all computers are on the same Tailscale network
 echo 2. Find your computer's Tailscale IP ^(run: tailscale ip -4^)
-echo 3. Access the app at: http^://^<tailscale-ip^>:%PORT%
+echo 3. Start the server bound to that IP: set HOST=^<tailscale-ip^> ^& npm start
+echo 4. Access the app at: http^://^<tailscale-ip^>:%PORT%
 echo.
 echo Optional environment variables:
-echo    set PORT=8080 ^& npm start        # Use custom port
-echo    set HOSTNAME=mycomputer ^& npm start  # Set custom hostname
+echo    set PORT=8080 ^& npm start                   # Use custom port
+echo    set HOSTNAME=mycomputer ^& npm start          # Set custom hostname
+echo    set HOST=^<tailscale-ip^> ^& npm start         # Allow LAN/tailnet access (default: 127.0.0.1 only)
+echo    set SCRATCHPAD_TOKEN=^<secret^> ^& npm start   # Require a shared-secret token on /api/* requests
+echo.
+echo See README.md 'Network Binding ^& Access Control' for details and tradeoffs.
 echo.
 pause

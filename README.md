@@ -45,18 +45,11 @@ npm start
 npm start
 ```
 
-The server will start on `http://localhost:7777`
+The server will start on `http://127.0.0.1:7777` — reachable only from the same machine by default.
 
 ### Accessing from Other Computers
 
-1. Make sure all computers are on the same Tailscale network
-2. Find your computer's Tailscale IP:
-   - **macOS/Linux**: `tailscale ip -4`
-   - **Windows**: `tailscale ip -4` (in PowerShell or Command Prompt)
-3. Access the app from another computer:
-   ```
-   http://<tailscale-ip>:7777
-   ```
+See [Network Binding & Access Control](#network-binding--access-control) below for how to expose the server to your Tailscale network (or LAN) and optionally require a shared-secret token.
 
 ### Custom Port
 
@@ -70,6 +63,53 @@ PORT=8080 npm start
 set PORT=8080
 npm start
 ```
+
+### Network Binding & Access Control
+
+By default the server binds to `127.0.0.1` (loopback only) — **it is not reachable from any other machine, even on your LAN or tailnet, unless you explicitly opt in.**
+
+#### Allow access from other machines on your Tailscale network (recommended)
+
+Bind to your Tailscale IP specifically, so only tailnet traffic reaches the server:
+
+```bash
+# macOS/Linux
+HOST=$(tailscale ip -4) npm start
+```
+```cmd
+:: Windows (PowerShell)
+$env:HOST = (tailscale ip -4); npm start
+```
+
+#### Allow access from any interface (less safe)
+
+```bash
+HOST=0.0.0.0 npm start
+```
+
+**Tradeoff:** binding to `0.0.0.0` exposes the clipboard to *every* network the machine is connected to — including shared/public wifi (coffee shops, offices, airports), not just your tailnet. Prefer binding to the Tailscale IP above unless you have another network-level control (firewall rules) in place. If you must expose the server beyond your tailnet, enable the shared-secret token below.
+
+#### Optional shared-secret token
+
+For defense-in-depth beyond network binding, set `SCRATCHPAD_TOKEN` to require a matching token on every `/api/*` request (including clear/delete):
+
+```bash
+# macOS/Linux
+SCRATCHPAD_TOKEN=your-long-random-secret npm start
+```
+```cmd
+:: Windows
+set SCRATCHPAD_TOKEN=your-long-random-secret
+npm start
+```
+
+When set, every API client (including the web UI itself) must send it as a header:
+
+```
+X-Scratchpad-Token: your-long-random-secret
+```
+
+The web UI handles this automatically: on a `401` it prompts you for the token once and remembers it in the browser's `localStorage` for subsequent requests. Leave `SCRATCHPAD_TOKEN` unset to keep the zero-config local/tailnet flow.
 
 ## How to Use
 
@@ -184,9 +224,11 @@ MIT
 
 ### Can't access from other computers?
 
-1. Check Tailscale is running: `tailscale status`
-2. Verify the IP: `tailscale ip -4`
-3. Check firewall isn't blocking port 7777
+1. Make sure you started the server with `HOST` set (see [Network Binding & Access Control](#network-binding--access-control)) — by default it only binds to `127.0.0.1` and won't accept connections from anywhere else.
+2. Check Tailscale is running: `tailscale status`
+3. Verify the IP: `tailscale ip -4`
+4. Check firewall isn't blocking port 7777
+5. If `SCRATCHPAD_TOKEN` is set, make sure the client is sending the matching `X-Scratchpad-Token` header
 4. Try using the Tailscale IP instead of hostname
 
 ### Port already in use?

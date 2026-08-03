@@ -5,10 +5,17 @@ import { v4 as uuidv4 } from 'uuid';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import crypto from 'crypto';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const port = process.env.PORT || 7777;
+// Default to loopback only. Set HOST=0.0.0.0 (or a specific interface IP,
+// e.g. the Tailscale IP) to accept connections from other machines.
+const host = process.env.HOST || '127.0.0.1';
+// Optional shared-secret auth. When SCRATCHPAD_TOKEN is set, all /api/*
+// requests must include a matching X-Scratchpad-Token header.
+const authToken = process.env.SCRATCHPAD_TOKEN || null;
 
 // Storage file for clipboard items
 const dataFile = path.join(__dirname, '../data.json');
@@ -36,8 +43,10 @@ function writeData(data) {
 // Middleware
 app.use(cors({
   origin: function(origin, callback) {
-    // Allow same-origin requests (no Origin header) and localhost/tailscale IPs
-    if (!origin || origin.match(/^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.|[a-f0-9]*::[a-f0-9]*)/i)) {
+    // Allow same-origin requests (no Origin header) and localhost/LAN/tailscale IPs.
+    // Tailscale assigns addresses from the 100.64.0.0/10 CGNAT range, not RFC1918,
+    // so it needs its own pattern alongside the private LAN ranges.
+    if (!origin || origin.match(/^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.|100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.|[a-f0-9]*::[a-f0-9]*)/i)) {
       callback(null, true);
     } else {
       callback(new Error('CORS not allowed'));
@@ -59,6 +68,24 @@ app.use((req, res, next) => {
 
 // Serve static files (frontend)
 app.use(express.static(path.join(__dirname, '../public')));
+
+// Shared-secret auth (optional). No-op when SCRATCHPAD_TOKEN is unset so the
+// simple local install path keeps working without any token.
+function requireToken(req, res, next) {
+  if (!authToken) return next();
+
+  const provided = req.headers['x-scratchpad-token'] || '';
+  const expected = Buffer.from(authToken);
+  const actual = Buffer.from(String(provided));
+
+  if (expected.length === actual.length && crypto.timingSafeEqual(expected, actual)) {
+    return next();
+  }
+
+  return res.status(401).json({ error: 'Unauthorized' });
+}
+
+app.use('/api', requireToken);
 
 // API Routes
 
@@ -152,7 +179,8 @@ app.get('/health', (req, res) => {
 
 ensureDataFile();
 
-app.listen(port, () => {
-  console.log(`Scratchpad server running on http://localhost:${port}`);
+app.listen(port, host, () => {
+  console.log(`Scratchpad server running on http://${host}:${port}`);
   console.log(`Data stored in ${dataFile}`);
+  console.log(authToken ? 'Shared-secret auth: ENABLED (SCRATCHPAD_TOKEN required on /api/*)' : 'Shared-secret auth: disabled (set SCRATCHPAD_TOKEN to enable)');
 });
