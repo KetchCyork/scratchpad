@@ -40,13 +40,37 @@ function writeData(data) {
   fs.writeFileSync(dataFile, JSON.stringify(data, null, 2));
 }
 
+// Allowed origin hostnames: localhost/LAN/tailscale addresses only.
+// Tailscale assigns addresses from the 100.64.0.0/10 CGNAT range, not RFC1918,
+// so it needs its own pattern alongside the private LAN ranges.
+// Each pattern is anchored with ^...$ against the *parsed hostname only*
+// (never the raw origin string), so "localhost.evil.com" or "10.evil.com"
+// cannot pass by matching a prefix and appending an attacker-controlled suffix.
+const ALLOWED_HOSTNAME_PATTERNS = [
+  /^localhost$/i,
+  /^127\.0\.0\.1$/,
+  /^192\.168\.\d{1,3}\.\d{1,3}$/,
+  /^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/,
+  /^172\.(1[6-9]|2[0-9]|3[01])\.\d{1,3}\.\d{1,3}$/,
+  /^100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.\d{1,3}\.\d{1,3}$/,
+  /^\[?[a-f0-9]*::[a-f0-9:]*\]?$/i
+];
+
+function isAllowedOrigin(origin) {
+  if (!origin) return true;
+  let hostname;
+  try {
+    hostname = new URL(origin).hostname;
+  } catch {
+    return false;
+  }
+  return ALLOWED_HOSTNAME_PATTERNS.some(pattern => pattern.test(hostname));
+}
+
 // Middleware
 app.use(cors({
   origin: function(origin, callback) {
-    // Allow same-origin requests (no Origin header) and localhost/LAN/tailscale IPs.
-    // Tailscale assigns addresses from the 100.64.0.0/10 CGNAT range, not RFC1918,
-    // so it needs its own pattern alongside the private LAN ranges.
-    if (!origin || origin.match(/^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.|100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.|[a-f0-9]*::[a-f0-9]*)/i)) {
+    if (isAllowedOrigin(origin)) {
       callback(null, true);
     } else {
       callback(new Error('CORS not allowed'));
