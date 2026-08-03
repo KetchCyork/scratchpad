@@ -1,9 +1,18 @@
 #!/bin/bash
 
 # Scratchpad - Cross-platform installation script
-# Installs and starts the scratchpad clipboard sharing app
+# Installs the scratchpad clipboard sharing app.
+#
+# Two ways to run it:
+#   1. One-line remote install (no clone needed):
+#        curl -fsSL https://raw.githubusercontent.com/KetchCyork/scratchpad/main/install.sh | bash
+#   2. From inside a cloned repo:
+#        bash install.sh
 
 set -e
+
+REPO_URL="https://github.com/KetchCyork/scratchpad.git"
+INSTALL_DIR="${SCRATCHPAD_DIR:-$HOME/scratchpad}"
 
 echo "🚀 Scratchpad - Network Clipboard Installation"
 echo "=============================================="
@@ -60,15 +69,47 @@ fi
 NPM_VERSION=$(npm -v)
 echo "✓ npm found: $NPM_VERSION"
 
-# Get the script directory
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-echo ""
-echo "Installation directory: $SCRIPT_DIR"
+# Figure out whether we are running from inside the repo (local run) or being
+# piped through bash from curl (remote run). When piped, BASH_SOURCE is not a
+# real file on disk, so we clone the repo ourselves.
+SOURCE="${BASH_SOURCE[0]:-}"
+SCRIPT_DIR=""
+if [ -n "$SOURCE" ] && [ -f "$SOURCE" ]; then
+  SCRIPT_DIR="$( cd "$( dirname "$SOURCE" )" && pwd )"
+fi
+
+if [ -n "$SCRIPT_DIR" ] && [ -f "$SCRIPT_DIR/package.json" ]; then
+  # Running from inside a cloned repo
+  TARGET_DIR="$SCRIPT_DIR"
+  echo ""
+  echo "Installing from local checkout: $TARGET_DIR"
+else
+  # Remote (curl | bash) run — we need git to fetch the code
+  if ! command -v git &> /dev/null; then
+    echo ""
+    echo "❌ git is required for the one-line remote install."
+    echo "   Install git, or clone the repo manually and run 'bash install.sh' from inside it:"
+    echo "     git clone $REPO_URL"
+    echo "     cd scratchpad && bash install.sh"
+    exit 1
+  fi
+
+  if [ -d "$INSTALL_DIR/.git" ]; then
+    echo ""
+    echo "📥 Updating existing install at $INSTALL_DIR ..."
+    git -C "$INSTALL_DIR" pull --ff-only
+  else
+    echo ""
+    echo "📥 Cloning Scratchpad into $INSTALL_DIR ..."
+    git clone "$REPO_URL" "$INSTALL_DIR"
+  fi
+  TARGET_DIR="$INSTALL_DIR"
+fi
 
 # Install dependencies
 echo ""
 echo "📦 Installing dependencies..."
-cd "$SCRIPT_DIR"
+cd "$TARGET_DIR"
 npm install
 
 # Determine port (default 7777)
@@ -79,7 +120,7 @@ echo "✅ Installation complete!"
 echo ""
 echo "🎉 To start the scratchpad server, run:"
 echo ""
-echo "   cd $SCRIPT_DIR"
+echo "   cd $TARGET_DIR"
 echo "   npm start"
 echo ""
 echo "The app will be available at: http://localhost:$PORT"

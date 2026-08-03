@@ -15,9 +15,25 @@ A simple, open-source app to share text and screenshots across computers on a Ta
 
 ### Installation
 
-#### macOS & Linux
+#### macOS & Linux — one command
+
+Paste this into a terminal. It fetches the code into `~/scratchpad`, installs
+dependencies, and tells you how to start the server. No manual clone needed:
 
 ```bash
+curl -fsSL https://raw.githubusercontent.com/KetchCyork/scratchpad/main/install.sh | bash
+```
+
+> **Got `install.sh: command not found`?** That happens when `install.sh` is
+> typed as a bare command. Use the one-liner above, or if you've already cloned
+> the repo, run it *through* bash from inside the folder: `bash install.sh`
+> (not `install.sh` or `./install.sh` without the `bash` prefix).
+
+Prefer to clone first? That works too:
+
+```bash
+git clone https://github.com/KetchCyork/scratchpad.git
+cd scratchpad
 bash install.sh
 ```
 
