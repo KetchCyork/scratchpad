@@ -52,30 +52,36 @@ if ($scriptDir -and (Test-Path (Join-Path $scriptDir 'package.json'))) {
     # which locks the folder and makes Move-Item fail ("item is in use"). Instead
     # we turn whatever is at $InstallDir into a clean origin/main checkout without
     # relocating it. (data.json is gitignored, so the saved clipboard survives.)
+    # NOTE: use "2>$null" (a real stream redirect), never "2>&1 | Out-Null", for
+    # git calls below. PowerShell converts a native command's stderr lines into
+    # ErrorRecord objects as part of the "2>&1" merge itself -- before the pipe
+    # to Out-Null ever runs -- so with $ErrorActionPreference = 'Stop' that
+    # pattern aborts the whole script on ANY stderr line (even benign progress
+    # output like "From https://...", not just real failures). "2>$null"
+    # discards the stream directly and never creates those error records.
     if (Test-Path (Join-Path $InstallDir '.git')) {
         Write-Host "Updating existing checkout at $InstallDir ..."
-        git -C $InstallDir remote set-url origin $RepoUrl 2>&1 | Out-Null
-        if ($LASTEXITCODE -ne 0) { git -C $InstallDir remote add origin $RepoUrl 2>&1 | Out-Null }
+        git -C $InstallDir remote set-url origin $RepoUrl 2>$null
+        if ($LASTEXITCODE -ne 0) { git -C $InstallDir remote add origin $RepoUrl 2>$null }
     } elseif (Test-Path $InstallDir) {
         # Folder exists but is not a git repo (or is a broken/partial checkout).
         # Initialize the repo in place rather than moving the folder aside.
         Write-Host "Repairing existing folder in place: $InstallDir ..."
-        git init $InstallDir 2>&1 | Out-Null
-        git -C $InstallDir remote remove origin 2>&1 | Out-Null
-        git -C $InstallDir remote add origin $RepoUrl 2>&1 | Out-Null
+        git init $InstallDir 2>$null
+        git -C $InstallDir remote add origin $RepoUrl 2>$null
     } else {
         Write-Host "Cloning Scratchpad into $InstallDir ..."
-        git init $InstallDir 2>&1 | Out-Null
-        git -C $InstallDir remote add origin $RepoUrl 2>&1 | Out-Null
+        git init $InstallDir 2>$null
+        git -C $InstallDir remote add origin $RepoUrl 2>$null
     }
 
-    git -C $InstallDir fetch origin 2>&1 | Out-Null
+    git -C $InstallDir fetch origin 2>$null
     if ($LASTEXITCODE -ne 0) {
         Write-Host '[ERROR] git fetch failed. Check your network connection and try again.'
         exit 1
     }
-    git -C $InstallDir checkout -B main origin/main --force 2>&1 | Out-Null
-    git -C $InstallDir reset --hard origin/main 2>&1 | Out-Null
+    git -C $InstallDir checkout -B main origin/main --force 2>$null
+    git -C $InstallDir reset --hard origin/main 2>$null
     if ($LASTEXITCODE -ne 0) {
         Write-Host '[ERROR] Could not check out origin/main into the folder.'
         exit 1
