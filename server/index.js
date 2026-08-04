@@ -6,13 +6,50 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import crypto from 'crypto';
+import os from 'os';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const port = process.env.PORT || 7777;
-// Default to loopback only. Set HOST=0.0.0.0 (or a specific interface IP,
-// e.g. the Tailscale IP) to accept connections from other machines.
-const host = process.env.HOST || '127.0.0.1';
+
+// Detect this machine's Tailscale IPv4 address, if any. Tailscale assigns
+// addresses from the 100.64.0.0/10 CGNAT range, so we scan local interfaces
+// for a non-internal IPv4 in that block. This needs no `tailscale` CLI in
+// PATH and works the same on Windows, macOS, and Linux.
+function getTailscaleIp() {
+  const ifaces = os.networkInterfaces();
+  for (const name of Object.keys(ifaces)) {
+    for (const addr of ifaces[name] || []) {
+      if (addr.family !== 'IPv4' || addr.internal) continue;
+      const m = addr.address.match(/^100\.(\d{1,3})\./);
+      if (m) {
+        const second = Number(m[1]);
+        if (second >= 64 && second <= 127) return addr.address;
+      }
+    }
+  }
+  return null;
+}
+
+const tailscaleIp = getTailscaleIp();
+
+// Host resolution. Default to loopback only (reachable from this computer).
+// `HOST=tailscale` or the `--tailscale` flag binds to the detected Tailscale
+// IP so other machines on your tailnet can reach it. `--tailscale` is the
+// cross-platform path (no shell env-var syntax needed), so `npm run share`
+// behaves identically on Windows, macOS, and Linux.
+const wantTailscale = process.env.HOST === 'tailscale' || process.argv.includes('--tailscale');
+let host;
+if (wantTailscale) {
+  if (!tailscaleIp) {
+    console.error('Requested Tailscale binding, but no Tailscale IP (100.64.0.0/10) was found on this machine.');
+    console.error('Is Tailscale up and connected? Check with:  tailscale ip -4');
+    process.exit(1);
+  }
+  host = tailscaleIp;
+} else {
+  host = process.env.HOST || '127.0.0.1';
+}
 // Optional shared-secret auth. When SCRATCHPAD_TOKEN is set, all /api/*
 // requests must include a matching X-Scratchpad-Token header.
 const authToken = process.env.SCRATCHPAD_TOKEN || null;
@@ -205,6 +242,30 @@ ensureDataFile();
 
 app.listen(port, host, () => {
   console.log(`Scratchpad server running on http://${host}:${port}`);
+
+  const isLoopback = host === '127.0.0.1' || host === 'localhost';
+  if (isLoopback) {
+    console.log('Bound to loopback only — reachable from THIS computer only.');
+    if (tailscaleIp) {
+      console.log('');
+      console.log('To share across your Tailscale network, restart with:');
+      console.log('    npm run share');
+      console.log(`Your Tailscale IP is ${tailscaleIp}. Other computers would then open:`);
+      console.log(`    http://${tailscaleIp}:${port}`);
+    } else {
+      console.log('No Tailscale IP detected. Start Tailscale, then run:  npm run share');
+    }
+  } else {
+    const shareIp = tailscaleIp || host;
+    console.log('');
+    console.log('Open this on your OTHER computers:');
+    console.log(`    http://${shareIp}:${port}`);
+    if (host === '0.0.0.0') {
+      console.log('(Bound to all interfaces — also reachable on your local LAN.)');
+    }
+  }
+
+  console.log('');
   console.log(`Data stored in ${dataFile}`);
   console.log(authToken ? 'Shared-secret auth: ENABLED (SCRATCHPAD_TOKEN required on /api/*)' : 'Shared-secret auth: disabled (set SCRATCHPAD_TOKEN to enable)');
 });

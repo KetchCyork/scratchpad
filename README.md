@@ -72,9 +72,34 @@ npm start
 
 The server will start on `http://127.0.0.1:7777` — reachable only from the same machine by default.
 
-### Accessing from Other Computers
+### Accessing from Other Computers (Tailscale) — one command
 
-See [Network Binding & Access Control](#network-binding--access-control) below for how to expose the server to your Tailscale network (or LAN) and optionally require a shared-secret token.
+To share across your Tailscale network, start it with:
+
+```bash
+npm run share
+```
+
+This works identically on **macOS, Linux, and Windows** — no environment
+variables to set. It auto-detects your Tailscale IP, binds to it, and prints the
+exact URL to open on your other computers, e.g.:
+
+```
+Open this on your OTHER computers:
+    http://100.74.9.120:7777
+```
+
+> **What's the difference vs. `npm start`?** `npm start` binds to `127.0.0.1`
+> (this computer only — the "local runtime"). `npm run share` binds to your
+> **Tailscale IP** so other machines on your tailnet can reach it. If you run
+> plain `npm start`, it will still print your Tailscale IP and remind you to run
+> `npm run share` when you want to share.
+
+If `npm run share` reports *no Tailscale IP found*, make sure Tailscale is
+running and connected (`tailscale ip -4` should print a `100.x.y.z` address),
+then try again.
+
+See [Network Binding & Access Control](#network-binding--access-control) below for advanced binding options and the optional shared-secret token.
 
 ### Custom Port
 
@@ -95,7 +120,15 @@ By default the server binds to `127.0.0.1` (loopback only) — **it is not reach
 
 #### Allow access from other machines on your Tailscale network (recommended)
 
-Bind to your Tailscale IP specifically, so only tailnet traffic reaches the server:
+The simplest, cross-platform way is:
+
+```bash
+npm run share
+```
+
+It auto-detects your Tailscale IP and binds to it (so only tailnet traffic
+reaches the server), then prints the shareable URL. If you'd rather pin the IP
+yourself, both of these are equivalent:
 
 ```bash
 # macOS/Linux
