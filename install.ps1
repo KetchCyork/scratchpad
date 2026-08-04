@@ -17,6 +17,26 @@ function Test-Command($name) {
     return [bool](Get-Command $name -ErrorAction SilentlyContinue)
 }
 
+function Invoke-Git {
+    # Run git with native stderr made NON-FATAL, then return git's exit code.
+    #
+    # Why this exists: Windows PowerShell 5.1, with $ErrorActionPreference = 'Stop',
+    # converts ANY line a native command writes to stderr into a terminating
+    # NativeCommandError -- even benign git progress like "From https://...". A
+    # "2>$null" redirect does NOT reliably stop that in 5.1, so the script would
+    # abort mid-install and leave a folder with no package.json. Setting the
+    # preference to 'Continue' locally makes native stderr non-fatal; we discard
+    # git's output and judge success ourselves from $LASTEXITCODE.
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        & git @args 2>&1 | Out-Null
+        return $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $prev
+    }
+}
+
 # Check Node.js
 if (-not (Test-Command node)) {
     Write-Host '[ERROR] Node.js is not installed.'
@@ -52,37 +72,33 @@ if ($scriptDir -and (Test-Path (Join-Path $scriptDir 'package.json'))) {
     # which locks the folder and makes Move-Item fail ("item is in use"). Instead
     # we turn whatever is at $InstallDir into a clean origin/main checkout without
     # relocating it. (data.json is gitignored, so the saved clipboard survives.)
-    # NOTE: use "2>$null" (a real stream redirect), never "2>&1 | Out-Null", for
-    # git calls below. PowerShell converts a native command's stderr lines into
-    # ErrorRecord objects as part of the "2>&1" merge itself -- before the pipe
-    # to Out-Null ever runs -- so with $ErrorActionPreference = 'Stop' that
-    # pattern aborts the whole script on ANY stderr line (even benign progress
-    # output like "From https://...", not just real failures). "2>$null"
-    # discards the stream directly and never creates those error records.
+    #
+    # Every git call goes through Invoke-Git (defined above), which neutralizes the
+    # Windows PowerShell 5.1 "native stderr becomes a fatal error" behavior and
+    # returns git's real exit code. Do NOT call git directly here.
     if (Test-Path (Join-Path $InstallDir '.git')) {
         Write-Host "Updating existing checkout at $InstallDir ..."
-        git -C $InstallDir remote set-url origin $RepoUrl 2>$null
-        if ($LASTEXITCODE -ne 0) { git -C $InstallDir remote add origin $RepoUrl 2>$null }
+        if ((Invoke-Git -C $InstallDir remote set-url origin $RepoUrl) -ne 0) {
+            Invoke-Git -C $InstallDir remote add origin $RepoUrl | Out-Null
+        }
     } elseif (Test-Path $InstallDir) {
         # Folder exists but is not a git repo (or is a broken/partial checkout).
         # Initialize the repo in place rather than moving the folder aside.
         Write-Host "Repairing existing folder in place: $InstallDir ..."
-        git init $InstallDir 2>$null
-        git -C $InstallDir remote add origin $RepoUrl 2>$null
+        Invoke-Git init $InstallDir | Out-Null
+        Invoke-Git -C $InstallDir remote add origin $RepoUrl | Out-Null
     } else {
         Write-Host "Cloning Scratchpad into $InstallDir ..."
-        git init $InstallDir 2>$null
-        git -C $InstallDir remote add origin $RepoUrl 2>$null
+        Invoke-Git init $InstallDir | Out-Null
+        Invoke-Git -C $InstallDir remote add origin $RepoUrl | Out-Null
     }
 
-    git -C $InstallDir fetch origin 2>$null
-    if ($LASTEXITCODE -ne 0) {
+    if ((Invoke-Git -C $InstallDir fetch origin) -ne 0) {
         Write-Host '[ERROR] git fetch failed. Check your network connection and try again.'
         exit 1
     }
-    git -C $InstallDir checkout -B main origin/main --force 2>$null
-    git -C $InstallDir reset --hard origin/main 2>$null
-    if ($LASTEXITCODE -ne 0) {
+    Invoke-Git -C $InstallDir checkout -B main origin/main --force | Out-Null
+    if ((Invoke-Git -C $InstallDir reset --hard origin/main) -ne 0) {
         Write-Host '[ERROR] Could not check out origin/main into the folder.'
         exit 1
     }
